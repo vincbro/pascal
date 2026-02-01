@@ -1,3 +1,6 @@
+![blaise](./assets/blaise.png)
+
+
 *pascal* (/pæˈskæl/) named after **Blaise Pascal**, completing the duo with *blaise*. While *blaise* handles the heavy lifting of routing and pathfinding, *pascal* provides the human connection, acting as a smart interface for your daily commute.
 
 *pascal* is a proactive, chat-based transit assistant. It integrates directly into your messaging apps (like Discord) to manage recurring trips, monitor your routes in real-time, and notify you exactly when it's time to leave, so you never have to check a timetable again.
