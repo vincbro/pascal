@@ -1,4 +1,4 @@
-package commands
+package main
 
 import (
 	"context"
@@ -6,7 +6,8 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/vincbro/pascal/internal/blaise"
+	"github.com/vincbro/pascal/blaise"
+	"github.com/vincbro/pascal/state"
 )
 
 func CreateNewTripCommand() Command {
@@ -14,6 +15,16 @@ func CreateNewTripCommand() Command {
 		Definition: &discordgo.ApplicationCommand{
 			Name:        "new",
 			Description: "Create a new trip",
+			// Contexts: &[]discordgo.InteractionContextType{
+			// 	discordgo.InteractionContextBotDM,
+			// 	discordgo.InteractionContextGuild,
+			// 	discordgo.InteractionContextPrivateChannel,
+			// },
+
+			// IntegrationTypes: &[]discordgo.ApplicationIntegrationType{
+			// 	discordgo.ApplicationIntegrationUserInstall,
+			// 	discordgo.ApplicationIntegrationGuildInstall,
+			// },
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Name:         "from",
@@ -36,13 +47,13 @@ func CreateNewTripCommand() Command {
 	}
 }
 
-func newTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, client blaise.Client) error {
+func newTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error {
 	opts := ParseOptions(i.ApplicationCommandData().Options)
 
 	from := opts["from"].Value.(string)
 	to := opts["to"].Value.(string)
 
-	itinerary, err := client.Routing(context.Background(), from, to)
+	itinerary, err := state.BClient.Routing(context.Background(), from, to)
 	if err != nil {
 		return err
 	}
@@ -57,7 +68,7 @@ func newTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, client
 	return err
 }
 
-func newTripAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, client blaise.Client) error {
+func newTripAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error {
 	data := i.ApplicationCommandData()
 	var choices []*discordgo.ApplicationCommandOptionChoice
 
@@ -68,7 +79,7 @@ func newTripAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, c
 		switch option.Name {
 		case "from", "to":
 			// User is typing in the "from" field
-			results, err := client.SearchAreas(context.Background(), option.StringValue(), 10)
+			results, err := state.BClient.SearchAreas(context.Background(), option.StringValue(), 10)
 			if err != nil {
 				fmt.Println("error failed to search for area", err)
 				return err

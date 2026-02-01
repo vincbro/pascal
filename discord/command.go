@@ -1,11 +1,13 @@
-package commands
+package main
 
 import (
+	"fmt"
+
 	"github.com/bwmarrin/discordgo"
-	"github.com/vincbro/pascal/internal/blaise"
+	"github.com/vincbro/pascal/state"
 )
 
-type CommandHandler func(s *discordgo.Session, i *discordgo.InteractionCreate, client blaise.Client) error
+type CommandHandler func(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error
 
 type Command struct {
 	Definition   *discordgo.ApplicationCommand
@@ -18,12 +20,23 @@ type Commands map[string]*Command
 func (c *Commands) BulkOverwrite(dg *discordgo.Session, appID string, guildID string) error {
 	values := make([]*discordgo.ApplicationCommand, 0, len(*c))
 	for k := range *c {
-		values = append(values, (*c)[k].Definition)
+		def := (*c)[k].Definition
+
+		def.IntegrationTypes = &[]discordgo.ApplicationIntegrationType{
+			discordgo.ApplicationIntegrationUserInstall,
+		}
+		def.Contexts = &[]discordgo.InteractionContextType{
+			discordgo.InteractionContextBotDM,
+		}
+
+		values = append(values, def)
 	}
+
 	createdCommands, err := dg.ApplicationCommandBulkOverwrite(appID, guildID, values)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to bulk overwrite global commands: %w", err)
 	}
+
 	for _, command := range createdCommands {
 		if cmd, ok := (*c)[command.Name]; ok {
 			cmd.Definition = command
