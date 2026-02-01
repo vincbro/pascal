@@ -1,4 +1,4 @@
-![blaise](./assets/blaise.png)
+![pascal](./assets/pascal.png)
 
 
 *pascal* (/pæˈskæl/) named after **Blaise Pascal**, completing the duo with *blaise*. While *blaise* handles the heavy lifting of routing and pathfinding, *pascal* provides the human connection, acting as a smart interface for your daily commute.
