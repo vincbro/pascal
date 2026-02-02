@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/vincbro/pascal/database"
 	"github.com/vincbro/pascal/state"
 )
 
@@ -63,4 +65,19 @@ func ParseOptions(options []*discordgo.ApplicationCommandInteractionDataOption) 
 		om[opt.Name] = opt
 	}
 	return om
+}
+
+func GetUser(dUser *discordgo.User, channelID string, state *state.State) (*database.User, error) {
+	user, err := state.DB.GetOrCreateUser(dUser.ID, dUser.Username)
+	if err != nil {
+		return nil, err
+	}
+	if channelID != "" && channelID != user.ChannelID {
+		slog.Debug("Updating user channel id", "old", user.ChannelID, "new", channelID)
+		user.ChannelID = channelID
+		if err = state.DB.UpdateUser(user); err != nil {
+			return nil, err
+		}
+	}
+	return user, nil
 }

@@ -55,10 +55,33 @@ func main() {
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		slog.Info("Pascal is now online!", "user", r.User.Username)
 		s.UpdateGameStatus(0, "Watching your commute 🚆")
+		users, err := state.DB.GetAllUsers()
+		if err != nil {
+			slog.Error("error failed to get all users", "error", err)
+			return
+		}
+
+		for _, user := range users {
+			if user.ChannelID == "" {
+				continue
+			}
+			msg, err := s.ChannelMessageSend(user.ChannelID, "Im alive :)")
+			if err != nil {
+				slog.Error("error failed to send message", "user", user.Username, "error", err)
+				continue
+			}
+			s.MessageReactionAdd(msg.ChannelID, msg.ID, "🤫")
+		}
 	})
 
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		InteractionCreate(s, i, cmds, state)
+	})
+	dg.AddHandler(func(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
+		MessageReactionAdd(s, r, cmds, state)
+	})
+	dg.AddHandler(func(s *discordgo.Session, r *discordgo.MessageReactionRemove) {
+		MessageReactionRemove(s, r, cmds, state)
 	})
 
 	slog.Info("Opening discord bot connection")

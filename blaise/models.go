@@ -26,7 +26,7 @@ type Coordinate struct {
 type Itenirary struct {
 	From          Location `json:"from"`
 	To            Location `json:"to"`
-	DepartureTime Time     `json:"departue_time"`
+	DepartureTime Time     `json:"departure_time"`
 	ArrivalTime   Time     `json:"arrival_time"`
 	Legs          []Leg    `json:"legs"`
 }
@@ -34,7 +34,7 @@ type Itenirary struct {
 type Leg struct {
 	From          Location `json:"from"`
 	To            Location `json:"to"`
-	DepartureTime Time     `json:"departue_time"`
+	DepartureTime Time     `json:"departure_time"`
 	ArrivalTime   Time     `json:"arrival_time"`
 	Stops         []Stop   `json:"stops"`
 	Shapes        []Shape  `json:"shapes"`
@@ -46,7 +46,7 @@ type Leg struct {
 
 type Stop struct {
 	Location        Location `json:"location"`
-	DepartureTime   Time     `json:"departue_time"`
+	DepartureTime   Time     `json:"departure_time"`
 	ArrivalTime     Time     `json:"arrival_time"`
 	DistanceTraveld float32  `json:"distance_traveld"`
 }

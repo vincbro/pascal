@@ -26,3 +26,27 @@ func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate, cmd
 		}
 	}
 }
+
+func MessageReactionRemove(s *discordgo.Session, r *discordgo.MessageReactionRemove, cmds Commands, state *state.State) {
+	if r.UserID == s.State.User.ID {
+		return
+	}
+
+	if r.Emoji.Name != "🤫" {
+		return
+	}
+
+	s.ChannelMessageSend(r.ChannelID, "🔔 **Trip unsilenced.** I will send you updates for this journey.")
+}
+
+func MessageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd, cmds Commands, state *state.State) {
+	if r.UserID == s.State.User.ID {
+		return
+	}
+
+	if r.Emoji.Name != "🤫" {
+		return
+	}
+
+	s.ChannelMessageSend(r.ChannelID, "🔕 **Trip silenced.** I won't send more updates for this journey.")
+}
