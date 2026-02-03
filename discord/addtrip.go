@@ -10,15 +10,16 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
+
 	"github.com/vincbro/pascal/blaise"
 	"github.com/vincbro/pascal/database"
 	"github.com/vincbro/pascal/state"
 )
 
-func CreateNewTripCommand() Command {
+func CreateAddTripCommand() Command {
 	return Command{
 		Definition: &discordgo.ApplicationCommand{
-			Name:        "new",
+			Name:        "add",
 			Description: "Create a new trip",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
@@ -60,23 +61,23 @@ func CreateNewTripCommand() Command {
 				},
 			},
 		},
-		Handler:      newTripHandler,
-		Autocomplete: newTripAutocomplete,
+		Handler:      addTripHandler,
+		Autocomplete: addTripAutocomplete,
 	}
 }
 
-func newTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error {
+func addTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error {
 	user, err := GetUser(i.User, i.ChannelID, state)
 	if err != nil {
 		return err
 	}
 	opts := ParseOptions(i.ApplicationCommandData().Options)
 
-	name := opts["name"].Value.(string)
-	from := opts["from"].Value.(string)
-	to := opts["to"].Value.(string)
-	time := opts["time"].Value.(string)
-	departure := opts["type"].Value.(string) == "depart"
+	name := opts["name"].StringValue()
+	from := opts["from"].StringValue()
+	to := opts["to"].StringValue()
+	time := opts["time"].StringValue()
+	departure := opts["type"].StringValue() == "depart"
 
 	itenirary, err := state.BClient.Routing(context.Background(), from, to, time, departure)
 	if err != nil {
@@ -87,15 +88,22 @@ func newTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state 
 		ID:                uuid.New().String(),
 		UserID:            user.ID,
 		Name:              name,
-		From:              from,
-		To:                to,
+		From:              itenirary.From.Name,
+		FromID:            itenirary.From.ID,
+		To:                itenirary.To.Name,
+		ToID:              itenirary.To.ID,
 		Time:              time,
 		Departure:         departure,
-		ExpectedDeparture: itenirary.DepartureTime,
-		ExpectedArrival:   itenirary.ArrivalTime,
+		ExpectedItinerary: itenirary,
 	}
 
 	if err = state.DB.AddTrip(&trip); err != nil {
+		return err
+	}
+
+	user.AddHistory(itenirary.From)
+	user.AddHistory(itenirary.To)
+	if err = state.DB.UpdateUser(user); err != nil {
 		return err
 	}
 
@@ -108,7 +116,7 @@ func newTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state 
 	embed := &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("✅ Saved: %s", name),
 		Description: "I've added this trip to my database. I'll alert you before you need to leave.",
-		Color:       0x57F287, // Discord Green
+		Color:       0x57F287,
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:   "Route",
@@ -145,8 +153,8 @@ func newTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state 
 	return err
 }
 
-func newTripAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error {
-	_, err := GetUser(i.User, i.ChannelID, state)
+func addTripAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error {
+	user, err := GetUser(i.User, i.ChannelID, state)
 	if err != nil {
 		return err
 	}
@@ -160,11 +168,16 @@ func newTripAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, s
 		}
 		switch option.Name {
 		case "from", "to":
-			// User is typing in the "from" field
-			results, err := state.BClient.SearchAreas(context.Background(), option.StringValue(), 10)
-			if err != nil {
-				fmt.Println("error failed to search for area", err)
-				return err
+			input := option.StringValue()
+			var results []blaise.Location
+			if len(input) == 0 {
+				results = user.Locations
+			} else {
+				results, err = state.BClient.SearchAreas(context.Background(), option.StringValue(), 10)
+				if err != nil {
+					fmt.Println("error failed to search for area", err)
+					return err
+				}
 			}
 			for _, area := range results {
 				choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
@@ -258,85 +271,4 @@ func timeSuggestions(input string) []time.Time {
 	}
 
 	return choices
-}
-
-// TEMP
-func getModeEmoji(mode string) string {
-	switch mode {
-	case "Tram":
-		return "🚋"
-	case "Subway":
-		return "🚇"
-	case "Rail":
-		return "🚆"
-	case "Bus":
-		return "🚌"
-	case "Ferry":
-		return "⛴️"
-	case "Walk":
-		return "🚶"
-	case "Transfer":
-		return "🔄"
-	default:
-		return "❓"
-	}
-}
-
-// TEMP
-func formatRouteEmbed(itinerary blaise.Itenirary) *discordgo.MessageEmbed {
-	embed := &discordgo.MessageEmbed{
-		Title:       "📍 Route Details",
-		Color:       0x3498db, // Pascal Blue
-		Description: fmt.Sprintf("**From:** %s\n**To:** %s", itinerary.From.Name, itinerary.To.Name),
-		Footer: &discordgo.MessageEmbedFooter{
-			Text: "Powered by Blaise Engine",
-		},
-	}
-
-	for _, leg := range itinerary.Legs {
-		emoji := getModeEmoji(leg.Mode)
-
-		// 1. Format the title of the leg (e.g., "Bus 50 (Towards Centralen)")
-		legTitle := fmt.Sprintf("%s %s", emoji, leg.Mode)
-		if leg.ShortName != nil {
-			legTitle = fmt.Sprintf("%s %s", emoji, *leg.ShortName)
-		}
-		if leg.HeadSign != nil {
-			legTitle += fmt.Sprintf(" (Towards %s)", *leg.HeadSign)
-		}
-
-		// 2. Build the detailed "Value" using a strings.Builder for efficiency
-		var sb strings.Builder
-
-		// Departure time and location
-		fmt.Fprintf(&sb, "`%s` ➔ `%s`\n", leg.DepartureTime.ToHMSString(), leg.ArrivalTime.ToHMSString())
-		fmt.Fprintf(&sb, "**Start:** %s\n", leg.From.Name)
-
-		// 3. Add the intermediate stops
-		if len(leg.Stops) > 0 {
-			for _, stop := range leg.Stops {
-				// Avoid redundancy: skip the stop if it's the same as the leg's starting location
-				if stop.Location.ID == leg.From.ID || stop.Location.ID == leg.To.ID {
-					continue
-				}
-				// Format as a bullet point: • 12:05 Stop Name
-				fmt.Fprintf(&sb, "• `%s` %s\n", stop.ArrivalTime.ToHMSString(), stop.Location.Name)
-			}
-		}
-		fmt.Fprintf(&sb, "**End:** %s\n", leg.To.Name)
-
-		// Ensure the field value does not exceed Discord's 1024-character limit
-		value := sb.String()
-		if len(value) > 1021 {
-			value = value[:1018] + "..."
-		}
-
-		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:   legTitle,
-			Value:  value,
-			Inline: false,
-		})
-	}
-
-	return embed
 }

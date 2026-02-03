@@ -53,7 +53,9 @@ func (c *Commands) Add(command Command) {
 
 func GetCommands() Commands {
 	c := make(Commands)
-	c.Add(CreateNewTripCommand())
+	c.Add(CreateAddTripCommand())
+	c.Add(CreateRemoveTripCommand())
+	c.Add(CreateListCommand())
 	return c
 }
 

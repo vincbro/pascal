@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func (c *Client) Routing(ctx context.Context, from, to, timeStr string, departure bool) (Itenirary, error) {
+func (c *Client) Routing(ctx context.Context, from, to, timeStr string, departure bool) (Itinerary, error) {
 	req, _ := http.NewRequestWithContext(ctx, "GET", c.BaseURL+"/routing", nil)
 
 	q := req.URL.Query()
@@ -20,13 +20,13 @@ func (c *Client) Routing(ctx context.Context, from, to, timeStr string, departur
 	req.URL.RawQuery = q.Encode()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return Itenirary{}, err
+		return Itinerary{}, err
 	}
 	defer resp.Body.Close()
 
-	var itenirary Itenirary
+	var itenirary Itinerary
 	if err := json.NewDecoder(resp.Body).Decode(&itenirary); err != nil {
-		return Itenirary{}, err
+		return Itinerary{}, err
 	}
 	return itenirary, nil
 }
