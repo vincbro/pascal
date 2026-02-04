@@ -30,8 +30,8 @@ func CreateListCommand() Command {
 	}
 }
 
-func listHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state *state.State) error {
-	user, err := GetUser(i.User, i.ChannelID, state)
+func listHandler(s *discordgo.Session, i *discordgo.InteractionCreate, st *state.State) error {
+	user, err := GetUser(i.User, i.ChannelID, st)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func listHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state *st
 	var embed *discordgo.MessageEmbed
 	if value, ok := opts["name"]; ok {
 		id := value.StringValue()
-		trip, err := state.DB.GetTrip(user.ID, id)
+		trip, err := st.DB.GetTrip(user.ID, id)
 		if err != nil {
 			return err
 		}
@@ -61,7 +61,7 @@ func listHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state *st
 			},
 		}
 	} else {
-		trips, err := state.DB.GetAllTrips(user.ID)
+		trips, err := st.DB.GetAllUsersTrips(user.ID)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func listAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, stat
 		}
 		switch option.Name {
 		case "name":
-			trips, err := state.DB.GetAllTrips(user.ID)
+			trips, err := state.DB.GetAllUsersTrips(user.ID)
 			if err != nil {
 				slog.Error("error failed to get trips for user", "user", user.ID, "error", err)
 				return err

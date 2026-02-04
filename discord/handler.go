@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/vincbro/pascal/state"
@@ -27,7 +29,7 @@ func InteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate, cmd
 	}
 }
 
-func MessageReactionRemove(s *discordgo.Session, r *discordgo.MessageReactionRemove, cmds Commands, state *state.State) {
+func MessageReactionRemove(s *discordgo.Session, r *discordgo.MessageReactionRemove, cmds Commands, st *state.State) {
 	if r.UserID == s.State.User.ID {
 		return
 	}
@@ -36,10 +38,39 @@ func MessageReactionRemove(s *discordgo.Session, r *discordgo.MessageReactionRem
 		return
 	}
 
-	s.ChannelMessageSend(r.ChannelID, "🔔 **Trip unsilenced.** I will send you updates for this journey.")
+	user, err := st.DB.GetUser(r.UserID)
+	if err != nil {
+		slog.Error("error while getting user", "error", err)
+		return
+	}
+
+	msg, err := s.ChannelMessage(r.ChannelID, r.MessageID)
+	if err != nil {
+		slog.Error("error while getting msg", "error", err)
+		return
+	}
+
+	if len(msg.Embeds) > 0 && msg.Embeds[0].Footer != nil {
+		footerText := msg.Embeds[0].Footer.Text
+		words := strings.Fields(footerText)
+		if len(words) > 0 {
+			tripID := words[len(words)-1]
+			trip, err := st.DB.GetTrip(user.ID, tripID)
+			if err != nil {
+				slog.Error("error while getting trip", "error", err)
+				return
+			}
+			st.UnMuteTrip(trip.ID)
+			_, err = s.ChannelMessageSend(r.ChannelID, fmt.Sprintf("🔔 **%s unmuted.**", trip.Name))
+			if err != nil {
+				slog.Error("error while sending msg", "error", err)
+				return
+			}
+		}
+	}
 }
 
-func MessageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd, cmds Commands, state *state.State) {
+func MessageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd, cmds Commands, st *state.State) {
 	if r.UserID == s.State.User.ID {
 		return
 	}
@@ -48,5 +79,35 @@ func MessageReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd, c
 		return
 	}
 
-	s.ChannelMessageSend(r.ChannelID, "🔕 **Trip silenced.** I won't send more updates for this journey.")
+	user, err := st.DB.GetUser(r.UserID)
+	if err != nil {
+		slog.Error("error while getting user", "error", err)
+		return
+	}
+
+	msg, err := s.ChannelMessage(r.ChannelID, r.MessageID)
+	if err != nil {
+		slog.Error("error while getting msg", "error", err)
+		return
+	}
+
+	if len(msg.Embeds) > 0 && msg.Embeds[0].Footer != nil {
+		footerText := msg.Embeds[0].Footer.Text
+		words := strings.Fields(footerText)
+		if len(words) > 0 {
+			tripID := words[len(words)-1]
+			trip, err := st.DB.GetTrip(user.ID, tripID)
+			if err != nil {
+				slog.Error("error while getting trip", "error", err)
+				return
+			}
+			st.MuteTrip(trip.ID)
+			_, err = s.ChannelMessageSend(r.ChannelID, fmt.Sprintf("🔕 **%s muted.**", trip.Name))
+			if err != nil {
+				slog.Error("error while sending msg", "error", err)
+				return
+			}
+		}
+	}
+
 }

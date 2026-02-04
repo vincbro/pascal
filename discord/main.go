@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -35,7 +36,7 @@ func main() {
 		slog.Error("error connection to database", "error", err)
 		os.Exit(2)
 	}
-	state := state.NewState(db, bClient)
+	st := state.NewState(db, bClient)
 
 	slog.Info("Created discord session")
 	dg, err := discordgo.New("Bot " + discordKey)
@@ -51,37 +52,37 @@ func main() {
 		slog.Error("error creating commands", "error", err)
 		os.Exit(4)
 	}
-
-	dg.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
-		slog.Info("Pascal is now online!", "user", r.User.Username)
-		s.UpdateGameStatus(0, "Watching your commute 🚆")
-		users, err := state.DB.GetAllUsers()
-		if err != nil {
-			slog.Error("error failed to get all users", "error", err)
-			return
-		}
-
-		for _, user := range users {
-			if user.ChannelID == "" {
-				continue
-			}
-			msg, err := s.ChannelMessageSend(user.ChannelID, "Im alive :)")
-			if err != nil {
-				slog.Error("error failed to send message", "user", user.Username, "error", err)
-				continue
-			}
-			s.MessageReactionAdd(msg.ChannelID, msg.ID, "🤫")
-		}
-	})
-
 	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		InteractionCreate(s, i, cmds, state)
+		InteractionCreate(s, i, cmds, st)
 	})
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
-		MessageReactionAdd(s, r, cmds, state)
+		MessageReactionAdd(s, r, cmds, st)
 	})
 	dg.AddHandler(func(s *discordgo.Session, r *discordgo.MessageReactionRemove) {
-		MessageReactionRemove(s, r, cmds, state)
+		MessageReactionRemove(s, r, cmds, st)
+	})
+
+	st.AddHandler(func(s *state.State, request state.Request) error {
+		user, err := s.DB.GetUser(request.UserID)
+		if err != nil {
+			return err
+		}
+		trip, err := s.DB.GetTrip(request.UserID, request.TripID)
+		if err != nil {
+			return err
+		}
+		embed := &discordgo.MessageEmbed{
+			Title:  request.Message,
+			Fields: blaise.IteniraryToEmbedFields(trip.ExpectedItinerary),
+			Footer: &discordgo.MessageEmbedFooter{
+				Text: fmt.Sprintf("Pascal • TripID: %s", trip.ID),
+			},
+		}
+		msg, err := dg.ChannelMessageSendEmbed(user.ChannelID, embed)
+		if err != nil {
+			return err
+		}
+		return dg.MessageReactionAdd(msg.ChannelID, msg.ID, "🤫")
 	})
 
 	slog.Info("Opening discord bot connection")
@@ -91,6 +92,10 @@ func main() {
 		os.Exit(5)
 	}
 	defer dg.Close()
+
+	slog.Info("Starting trip watcher")
+	st.Start()
+	defer st.Stop()
 
 	// Wait here until CTRL-C or other term signal is received.
 	slog.Info("Bot is now running. Press CTRL-C to exit.")

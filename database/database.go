@@ -25,6 +25,15 @@ func NewDatabase(dsn string) (*Database, error) {
 	}, nil
 }
 
+func (d *Database) GetUser(userID string) (*User, error) {
+	user := &User{}
+	result := d.Client.First(user, User{ID: userID})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return user, nil
+}
+
 func (d *Database) GetOrCreateUser(userID, username string) (*User, error) {
 	user := &User{}
 	result := d.Client.FirstOrCreate(user, User{ID: userID, Username: username})
@@ -56,9 +65,18 @@ func (d *Database) AddTrip(trip *Trip) error {
 	return result.Error
 }
 
-func (d *Database) GetAllTrips(userID string) ([]*Trip, error) {
+func (d *Database) GetAllUsersTrips(userID string) ([]*Trip, error) {
 	trips := []*Trip{}
 	result := d.Client.Find(&trips, Trip{UserID: userID})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return trips, nil
+}
+
+func (d *Database) GetAllTrips() ([]*Trip, error) {
+	trips := []*Trip{}
+	result := d.Client.Find(&trips)
 	if result.Error != nil {
 		return nil, result.Error
 	}
