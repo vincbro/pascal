@@ -1,6 +1,11 @@
 package database
 
-import "github.com/vincbro/pascal/blaise"
+import (
+	"fmt"
+	"time"
+
+	"github.com/vincbro/pascal/blaise"
+)
 
 type User struct {
 	ID        string `grom:"primaryKey"`
@@ -37,5 +42,45 @@ type Trip struct {
 	Time      string
 	Departure bool
 
+	Monday    bool
+	Tuesday   bool
+	Wednesday bool
+	Thursday  bool
+	Friday    bool
+	Saturday  bool
+	Sunday    bool
+
 	ExpectedItinerary blaise.Itinerary `gorm:"serializer:json"`
+}
+
+func (t Trip) FormatSchedule() string {
+	return fmt.Sprintf("**Monday**: %t\n**Tuesday**: %t\n**Wednesday**: %t\n**Thursday**: %t\n**Friday**: %t\n**Saturday**: %t\n**Sunday**: %t",
+		t.Monday,
+		t.Tuesday,
+		t.Wednesday,
+		t.Thursday,
+		t.Friday,
+		t.Saturday,
+		t.Sunday,
+	)
+}
+
+func (t Trip) ShouldRun(weekday time.Weekday) bool {
+	switch weekday {
+	case time.Sunday:
+		return t.Sunday
+	case time.Monday:
+		return t.Monday
+	case time.Tuesday:
+		return t.Tuesday
+	case time.Wednesday:
+		return t.Wednesday
+	case time.Thursday:
+		return t.Thursday
+	case time.Friday:
+		return t.Friday
+	case time.Saturday:
+		return t.Saturday
+	}
+	return false
 }

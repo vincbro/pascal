@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -16,25 +17,33 @@ type State struct {
 	DB      *database.Database
 	BClient *blaise.Client
 
-	handlers     []RequestHandler
-	requests     chan Request
-	kill         chan struct{}
-	wg           sync.WaitGroup
-	alertHistory map[string][]bool
-	mutedTrips   map[string]bool
+	gtfsUrl string
+
+	handlers  []RequestHandler
+	requests  chan Request
+	kill      chan struct{}
+	wg        sync.WaitGroup
+	tripsMeta map[string]TripMeta
 }
 
-func NewState(db *database.Database, bClient *blaise.Client) *State {
+type TripMeta struct {
+	AlertHistory []bool
+	Muted        bool
+	Edited       bool
+}
+
+func NewState(db *database.Database, bClient *blaise.Client, gtfsUrl string) *State {
 	return &State{
 		DB:      db,
 		BClient: bClient,
 
-		wg:           sync.WaitGroup{},
-		handlers:     make([]RequestHandler, 0),
-		requests:     make(chan Request, 128),
-		kill:         make(chan struct{}),
-		alertHistory: make(map[string][]bool),
-		mutedTrips:   make(map[string]bool),
+		gtfsUrl: gtfsUrl,
+
+		wg:        sync.WaitGroup{},
+		handlers:  make([]RequestHandler, 0),
+		requests:  make(chan Request, 128),
+		kill:      make(chan struct{}),
+		tripsMeta: make(map[string]TripMeta),
 	}
 }
 
@@ -59,14 +68,67 @@ func (s *State) SendRequest(request Request) {
 }
 
 func (s *State) MuteTrip(tripID string) {
-	s.mutedTrips[tripID] = true
+	meta, ok := s.tripsMeta[tripID]
+	if !ok {
+		meta = TripMeta{
+			AlertHistory: make([]bool, len(alerts)),
+			Muted:        true,
+			Edited:       true,
+		}
+	} else {
+		meta.Muted = true
+		meta.Edited = true
+	}
+	s.tripsMeta[tripID] = meta
 }
 
 func (s *State) UnMuteTrip(tripID string) {
-	s.mutedTrips[tripID] = false
+	meta, ok := s.tripsMeta[tripID]
+	if !ok {
+		meta = TripMeta{
+			AlertHistory: make([]bool, len(alerts)),
+			Muted:        false,
+			Edited:       true,
+		}
+	} else {
+		meta.Muted = false
+		meta.Edited = true
+	}
+	s.tripsMeta[tripID] = meta
+}
+
+func (s *State) UpdateAllTrips() error {
+	wg := sync.WaitGroup{}
+	trips, err := s.DB.GetAllTrips()
+	if err != nil {
+		return err
+	}
+
+	for _, t := range trips {
+		wg.Add(1)
+		go func(trip *database.Trip) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+			itinerary, err := s.BClient.Routing(ctx, trip.FromID, trip.ToID, trip.Time, trip.Departure)
+			cancel()
+			if err != nil {
+				slog.Error("error while getting trip", "name", trip.Name, "error", err)
+				return
+			}
+			trip.ExpectedItinerary = itinerary
+			if err := s.DB.UpdateTrip(trip); err != nil {
+				slog.Error("error while updating trip", "name", trip.Name, "error", err)
+				return
+			}
+			slog.Info("Updated trip", "name", trip.Name)
+		}(t)
+	}
+	wg.Wait()
+	return nil
 }
 
 func (s *State) Start() {
+	// Dispatch requests
 	s.wg.Go(func() {
 		for {
 			select {
@@ -82,6 +144,7 @@ func (s *State) Start() {
 		}
 	})
 
+	// Send notifications
 	s.wg.Go(func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -99,28 +162,35 @@ func (s *State) Start() {
 					break
 				}
 				for _, trip := range trips {
-					history, ok := s.alertHistory[trip.ID]
+					if !trip.ShouldRun(now.Weekday()) {
+						continue
+					}
+					meta, ok := s.tripsMeta[trip.ID]
+					// Create a new if we don't have one
 					if !ok {
-						history = make([]bool, len(alerts))
+						meta = TripMeta{
+							AlertHistory: make([]bool, len(alerts)),
+							Muted:        false,
+							Edited:       false,
+						}
 					}
 
 					departure := trip.ExpectedItinerary.DepartureTime
 					if currentSeconds > departure {
-						for i := range history {
-							history[i] = false
+						if meta.Edited {
+							for i := range meta.AlertHistory {
+								meta.AlertHistory[i] = false
+							}
+							meta.Muted = false
+							meta.Edited = false
+							slog.Debug("Reset", "name", trip.Name, "meta", meta)
 						}
-						s.alertHistory[trip.ID] = history
-						s.UnMuteTrip(trip.ID)
-						slog.Debug("Reset", "name", trip.Name, "history", history)
+						s.tripsMeta[trip.ID] = meta
 						continue
 					}
 
-					muted, ok := s.mutedTrips[trip.ID]
-					if !ok {
-						muted = false
-					}
-					if muted {
-						slog.Debug("Was Muted", "name", trip.Name, "history", history)
+					if meta.Muted {
+						slog.Debug("Was Muted", "name", trip.Name, "meta", meta)
 						continue
 					}
 
@@ -128,15 +198,16 @@ func (s *State) Start() {
 					shouldNotify := false
 					minsLeft := blaise.Time(0)
 					for i, alert := range alerts {
-						if alert > diff && !history[i] {
-							history[i] = true
+						if alert > diff && !meta.AlertHistory[i] {
+							meta.AlertHistory[i] = true
+							meta.Edited = true
 							shouldNotify = true
 							minsLeft = alert / 60
 						}
 					}
 					if shouldNotify {
-						slog.Debug("Updated", "name", trip.Name, "history", history)
-						s.alertHistory[trip.ID] = history
+						slog.Debug("Updated", "name", trip.Name, "meta", meta)
+						s.tripsMeta[trip.ID] = meta
 						s.SendRequest(Request{
 							UserID:  trip.UserID,
 							TripID:  trip.ID,
@@ -146,7 +217,40 @@ func (s *State) Start() {
 			case <-s.kill:
 				return
 			}
+		}
+	})
 
+	// Update data
+	s.wg.Go(func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+				if now.Hour() >= 6 && now.Hour() < 8 {
+					ageSeconds, err := s.BClient.GetAge(context.Background())
+					if err != nil {
+						slog.Error("Data Manager: Failed to get data age", "error", err)
+						continue
+					}
+					ageHours := ageSeconds / 3600
+					slog.Debug("Data Manager check", "age_hours", ageHours, "current_hour", now.Hour())
+
+					if ageHours > 23 {
+						slog.Info("GTFS data is stale, triggering refresh", "age_hours", ageHours)
+						err := s.BClient.TriggerRefresh(context.Background(), s.gtfsUrl)
+						if err != nil {
+							slog.Error("error while trying to trigger refresh", "error", err)
+						} else {
+							slog.Info("GTFS refreshed successfully")
+							s.UpdateAllTrips()
+						}
+					}
+				}
+			case <-s.kill:
+				return
+			}
 		}
 	})
 }

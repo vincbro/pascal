@@ -59,6 +59,41 @@ func CreateAddTripCommand() Command {
 					Required:     true,
 					Autocomplete: true,
 				},
+				{
+					Name:        "monday",
+					Description: "Should the trip run on Monday",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+				},
+				{
+					Name:        "tuesday",
+					Description: "Should the trip run on Tuesday",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+				},
+				{
+					Name:        "wednesday",
+					Description: "Should the trip run on Wednesday",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+				},
+				{
+					Name:        "thursday",
+					Description: "Should the trip run on Thursday",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+				},
+				{
+					Name:        "friday",
+					Description: "Should the trip run on Friday",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+				},
+				{
+					Name:        "saturday",
+					Description: "Should the trip run on Saturday",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+				},
+				{
+					Name:        "sunday",
+					Description: "Should the trip run on Sunday",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+				},
 			},
 		},
 		Handler:      addTripHandler,
@@ -73,11 +108,28 @@ func addTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state 
 	}
 	opts := ParseOptions(i.ApplicationCommandData().Options)
 
+	hasDay := func(day string) bool {
+		val, ok := opts[day]
+		if ok {
+			return val.BoolValue()
+		} else {
+			return true
+		}
+	}
+
 	name := opts["name"].StringValue()
 	from := opts["from"].StringValue()
 	to := opts["to"].StringValue()
 	time := opts["time"].StringValue()
 	departure := opts["type"].StringValue() == "depart"
+
+	monday := hasDay("monday")
+	tuesday := hasDay("tuesday")
+	wednesday := hasDay("wednesday")
+	thursday := hasDay("thursday")
+	friday := hasDay("friday")
+	saturday := hasDay("saturday")
+	sunday := hasDay("sunday")
 
 	itenirary, err := state.BClient.Routing(context.Background(), from, to, time, departure)
 	if err != nil {
@@ -85,15 +137,24 @@ func addTripHandler(s *discordgo.Session, i *discordgo.InteractionCreate, state 
 	}
 
 	trip := database.Trip{
-		ID:                uuid.New().String(),
-		UserID:            user.ID,
-		Name:              name,
-		From:              itenirary.From.Name,
-		FromID:            itenirary.From.ID,
-		To:                itenirary.To.Name,
-		ToID:              itenirary.To.ID,
-		Time:              time,
-		Departure:         departure,
+		ID:        uuid.New().String(),
+		UserID:    user.ID,
+		Name:      name,
+		From:      itenirary.From.Name,
+		FromID:    itenirary.From.ID,
+		To:        itenirary.To.Name,
+		ToID:      itenirary.To.ID,
+		Time:      time,
+		Departure: departure,
+
+		Monday:    monday,
+		Tuesday:   tuesday,
+		Wednesday: wednesday,
+		Thursday:  thursday,
+		Friday:    friday,
+		Saturday:  saturday,
+		Sunday:    sunday,
+
 		ExpectedItinerary: itenirary,
 	}
 

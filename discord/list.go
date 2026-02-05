@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/vincbro/pascal/blaise"
@@ -22,6 +23,11 @@ func CreateListCommand() Command {
 					Description:  "Enter if you only care about a single trip",
 					Type:         discordgo.ApplicationCommandOptionString,
 					Autocomplete: true,
+				},
+				{
+					Name:        "today",
+					Description: "Enter if you only care about the trips that depart today",
+					Type:        discordgo.ApplicationCommandOptionBoolean,
 				},
 			},
 		},
@@ -45,6 +51,11 @@ func listHandler(s *discordgo.Session, i *discordgo.InteractionCreate, st *state
 			return err
 		}
 
+		fields := blaise.IteniraryToEmbedFields(trip.ExpectedItinerary)
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:  "Schedule",
+			Value: trip.FormatSchedule(),
+		})
 		embed = &discordgo.MessageEmbed{
 			Title: trip.Name,
 			Description: fmt.Sprintf("From **%s** to **%s**\nDeparting **%s** and arriving **%s**\n(Travel time: %d min)",
@@ -55,7 +66,7 @@ func listHandler(s *discordgo.Session, i *discordgo.InteractionCreate, st *state
 				(trip.ExpectedItinerary.ArrivalTime-trip.ExpectedItinerary.DepartureTime)/60,
 			),
 			Color:  0x57F287,
-			Fields: blaise.IteniraryToEmbedFields(trip.ExpectedItinerary),
+			Fields: fields,
 			Footer: &discordgo.MessageEmbedFooter{
 				Text: "Pascal • Watching your commute",
 			},
@@ -65,25 +76,42 @@ func listHandler(s *discordgo.Session, i *discordgo.InteractionCreate, st *state
 		if err != nil {
 			return err
 		}
+		today := false
+		if todayOption, ok := opts["today"]; ok {
+			today = todayOption.BoolValue()
+		}
 
 		fields := make([]*discordgo.MessageEmbedField, 0, len(trips))
+		now := time.Now()
 		for _, trip := range trips {
+			if today && !trip.ShouldRun(now.Weekday()) {
+				continue
+			}
 			fields = append(fields, &discordgo.MessageEmbedField{
 				Name: trip.Name,
-				Value: fmt.Sprintf("From **%s** to **%s**\nDeparting **%s** and arriving **%s**\n(Travel time: %d min)",
+				Value: fmt.Sprintf("From **%s** to **%s**\nDeparting **%s** and arriving **%s**\n(Travel time: %d min)\n**Schedule**:\n%s",
 					trip.From,
 					trip.To,
 					trip.ExpectedItinerary.DepartureTime.ToHMSString(),
 					trip.ExpectedItinerary.ArrivalTime.ToHMSString(),
 					(trip.ExpectedItinerary.ArrivalTime-trip.ExpectedItinerary.DepartureTime)/60,
+					trip.FormatSchedule(),
 				),
 			})
 		}
 
+		desc := ""
+		if len(trips) == 0 {
+			desc = "You don't have any trips registered, you can add some with /add"
+		} else if today {
+			desc = "Here is all the trips you have registered for today"
+		} else {
+			desc = "Here is all the trips you have registered"
+		}
 		// 4. Create the Embed
 		embed = &discordgo.MessageEmbed{
 			Title:       "Your trips",
-			Description: "Here is all the trips you have registered",
+			Description: desc,
 			Color:       0x57F287,
 			Fields:      fields,
 			Footer: &discordgo.MessageEmbedFooter{
@@ -132,7 +160,7 @@ func listAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate, stat
 			}
 			scores := suddig.RankMatches(option.StringValue(), haystack)
 			sort.Slice(choices, func(i, j int) bool {
-				return scores[i] < scores[j]
+				return scores[i] > scores[j]
 			})
 		}
 	}

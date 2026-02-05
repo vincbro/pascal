@@ -97,3 +97,8 @@ func (d *Database) RemoveTrip(userID string, tripID string) error {
 	result := d.Client.Delete(trip, Trip{UserID: userID, ID: tripID})
 	return result.Error
 }
+
+func (d *Database) UpdateTrip(trip *Trip) error {
+	result := d.Client.Save(trip)
+	return result.Error
+}

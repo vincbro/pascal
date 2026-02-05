@@ -26,6 +26,7 @@ func main() {
 	appID := os.Getenv("APP_ID")
 	guildID := os.Getenv("GUILD_ID")
 	blaiseUrl := os.Getenv("BLAISE_URL")
+	gtfsUrl := os.Getenv("GTFS_URL")
 	slog.Debug("Settings: ", "Guild ID", guildID)
 
 	slog.Info("Creating blaise client")
@@ -36,7 +37,7 @@ func main() {
 		slog.Error("error connection to database", "error", err)
 		os.Exit(2)
 	}
-	st := state.NewState(db, bClient)
+	st := state.NewState(db, bClient, gtfsUrl)
 
 	slog.Info("Created discord session")
 	dg, err := discordgo.New("Bot " + discordKey)

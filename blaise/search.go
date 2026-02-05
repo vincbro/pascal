@@ -8,7 +8,10 @@ import (
 )
 
 func (c *Client) SearchAreas(ctx context.Context, query string, count int) ([]Location, error) {
-	req, _ := http.NewRequestWithContext(ctx, "GET", c.BaseURL+"/search/area", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", c.BaseURL+"/search/area", nil)
+	if err != nil {
+		return nil, err
+	}
 
 	q := req.URL.Query()
 	q.Add("q", query)
