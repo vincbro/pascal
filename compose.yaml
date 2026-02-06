@@ -1,0 +1,30 @@
+services:
+  pascal:
+    image: vincbrod/pascal:latest 
+    container_name: pascal
+    restart: unless-stopped
+    depends_on:
+      - blaise-server
+    environment:
+      - DISCORD_KEY=
+      - APP_ID=
+      - GUILD_ID=
+      - BLAISE_URL=http://blaise-server:3000
+      - GTFS_URL=
+      - DB_PATH=/data/main.db
+      - TZ=CET
+    volumes:
+      - ./data:/data
+
+  blaise-server:
+    image: vincbrod/blaise:latest
+    container_name: blaise-server
+    ports:
+      - "3000:3000"
+    environment:
+      - GTFS_DATA_PATH=/app/data/GTFS.zip
+      - ALLOCATOR_COUNT=32
+      - LOG_LEVEL=info
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

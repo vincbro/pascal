@@ -27,12 +27,16 @@ func main() {
 	guildID := os.Getenv("GUILD_ID")
 	blaiseUrl := os.Getenv("BLAISE_URL")
 	gtfsUrl := os.Getenv("GTFS_URL")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "main.db"
+	}
 	slog.Debug("Settings: ", "Guild ID", guildID)
 
 	slog.Info("Creating blaise client")
 	bClient := blaise.NewClient(blaiseUrl)
-	slog.Info("Connecting to database")
-	db, err := database.NewDatabase("main.db")
+	slog.Info("Connecting to database", "path", dbPath)
+	db, err := database.NewDatabase(dbPath)
 	if err != nil {
 		slog.Error("error connection to database", "error", err)
 		os.Exit(2)

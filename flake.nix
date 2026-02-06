@@ -21,6 +21,7 @@
           nativeBuildInputs = [
             pkgs.go
             pkgs.gopls
+            pkgs.dockerfile-language-server
           ];
 
           # Libraries your project links to go here
