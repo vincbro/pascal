@@ -56,6 +56,7 @@ func GetCommands() Commands {
 	c.Add(CreateAddTripCommand())
 	c.Add(CreateRemoveTripCommand())
 	c.Add(CreateListCommand())
+	c.Add(CreateEditTripCommand())
 	return c
 }
 
